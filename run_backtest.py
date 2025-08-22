@@ -1,7 +1,9 @@
 """Run historical backtest."""
 from __future__ import annotations
 
+import argparse
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -18,15 +20,63 @@ from trader.storage.db import get_session
 from trader.storage.models import AccountSnapshot, Run, RunType, Trade, StrategyVersion
 
 STRATS = {"sma_cross": SMACross, "rsi_reversion": RSIReversion}
+logger = logging.getLogger(__name__)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run historical backtest")
+    parser.add_argument("--exchange")
+    parser.add_argument("--symbols")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--timeout-ms", type=int)
+    parser.add_argument("--proxies-http")
+    parser.add_argument("--proxies-https")
+    return parser.parse_args()
 
 
 def main() -> None:
     setup_logging()
+    args = parse_args()
     cfg = load_config()
+    updates = {}
+    if args.exchange:
+        updates["exchange"] = args.exchange
+    if args.symbols:
+        updates["symbols"] = [s.strip() for s in args.symbols.split(",") if s.strip()]
+    if args.timeframe:
+        updates["timeframe"] = args.timeframe
+    if updates:
+        cfg = cfg.copy(update=updates)
+    if args.timeout_ms:
+        cfg.network.timeout_ms = args.timeout_ms
+    if args.proxies_http:
+        cfg.proxies.http = args.proxies_http
+    if args.proxies_https:
+        cfg.proxies.https = args.proxies_https
+
+    proxies = cfg.proxies.dict(exclude_none=True)
+    logger.info(
+        "settings exchange=%s symbols=%s timeframe=%s timeout_ms=%s proxies=%s",
+        cfg.exchange,
+        cfg.symbols,
+        cfg.timeframe,
+        cfg.network.timeout_ms,
+        proxies,
+    )
     strategy_cls = STRATS[cfg.strategy.name]
     strategy = strategy_cls(**cfg.strategy.params)
     data = {
-        s: fetch_ohlcv(cfg.exchange, s, cfg.timeframe, cfg.data.lookback_limit)
+        s: fetch_ohlcv(
+            cfg.exchange,
+            s,
+            cfg.timeframe,
+            cfg.data.lookback_limit,
+            timeout_ms=cfg.network.timeout_ms,
+            max_retries=cfg.network.max_retries,
+            backoff_base_ms=cfg.network.backoff_base_ms,
+            user_agent=cfg.network.user_agent,
+            proxies=proxies,
+        )
         for s in cfg.symbols
     }
     equity_df, trades_df = run_backtest(data, strategy, cfg)

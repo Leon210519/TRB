@@ -43,6 +43,30 @@ are handled in UTC.
 Backtest, tuning and live runs persist their results to `trader.sqlite`. The `runs/` folder contains
 CSV exports for inspection.
 
+## Connectivity Test and Network Settings
+
+Run a quick connectivity check before fetching live data:
+
+```bash
+python scripts/selftest_connection.py
+```
+
+Set `HTTP_PROXY` and `HTTPS_PROXY` environment variables to route requests through a proxy:
+
+```bash
+export HTTP_PROXY=http://proxy.example:8080
+export HTTPS_PROXY=http://proxy.example:8080
+```
+
+All runner scripts accept optional flags to override configuration values:
+
+```bash
+python run_backtest.py --exchange binance --symbols BTC/USDT,ETH/USDT --timeframe 1h \
+    --timeout-ms 30000 --proxies-http http://proxy --proxies-https http://proxy
+```
+
+Internet access is required for any runs that pull real market data.
+
 ## Strategies
 
 Strategies are pluggable. Add a new strategy by subclassing `trader.strategies.base.Strategy` and

@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import os
+
 import yaml
 from pydantic import BaseModel, Field, validator
 
@@ -39,6 +41,18 @@ class ScheduleConfig(BaseModel):
     retrain_hour_utc: int = Field(ge=0, le=23)
 
 
+class NetworkConfig(BaseModel):
+    timeout_ms: int = 20000
+    max_retries: int = 5
+    backoff_base_ms: int = 500
+    user_agent: str = "TraderBot/1.0"
+
+
+class ProxiesConfig(BaseModel):
+    http: Optional[str] = None
+    https: Optional[str] = None
+
+
 class Config(BaseModel):
     exchange: str
     symbols: List[str]
@@ -49,13 +63,22 @@ class Config(BaseModel):
     data: DataConfig
     tuning: TuningConfig
     schedule: ScheduleConfig
+    network: NetworkConfig = NetworkConfig()
+    proxies: ProxiesConfig = ProxiesConfig()
 
 
 def load_config(path: str | Path = "config.yaml") -> Config:
     """Load configuration from YAML file."""
     with open(path, "r", encoding="utf8") as fh:
         raw = yaml.safe_load(fh)
-    return Config(**raw)
+    cfg = Config(**raw)
+    http_proxy = os.getenv("HTTP_PROXY")
+    https_proxy = os.getenv("HTTPS_PROXY")
+    if http_proxy:
+        cfg.proxies.http = http_proxy
+    if https_proxy:
+        cfg.proxies.https = https_proxy
+    return cfg
 
 
 __all__ = ["Config", "load_config"]

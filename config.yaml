@@ -22,3 +22,11 @@ tuning:
   direction: "maximize"
 schedule:
   retrain_hour_utc: 2
+network:
+  timeout_ms: 20000
+  max_retries: 5
+  backoff_base_ms: 500
+  user_agent: TraderBot/1.0
+proxies:
+  http:
+  https:

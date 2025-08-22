@@ -24,12 +24,33 @@ STRATS = {
 
 
 cfg = load_config()
+net = cfg.network
+proxies = cfg.proxies.dict(exclude_none=True)
 st.set_page_config(page_title="Trader Dashboard", layout="wide")
 st.title("Paper Trading Dashboard")
+try:
+    fetch_ohlcv(
+        cfg.exchange,
+        cfg.symbols[0],
+        cfg.timeframe,
+        1,
+        timeout_ms=net.timeout_ms,
+        max_retries=net.max_retries,
+        backoff_base_ms=net.backoff_base_ms,
+        user_agent=net.user_agent,
+        proxies=proxies,
+    )
+except Exception:  # pragma: no cover - network failure
+    st.warning(
+        "Initial market data fetch failed. Run python scripts/selftest_connection.py or configure proxies/timeouts."
+    )
 
 # sidebar -------------------------------------------------------
 with st.sidebar:
     st.header("Parameters")
+    st.write(f"Exchange: {cfg.exchange}")
+    st.write(f"Timeframe: {cfg.timeframe}")
+    st.write(f"Timeout (ms): {net.timeout_ms}")
     strategy_name = st.selectbox("Strategy", list(STRATS.keys()), index=0)
     if st.checkbox("Use last tuned params") and Path("config.last_params.json").exists():
         params = json.loads(Path("config.last_params.json").read_text())
@@ -70,7 +91,20 @@ else:
 
 if run_bt:
     strat = STRATS[strategy_name](**params)
-    data = {s: fetch_ohlcv(cfg.exchange, s, cfg.timeframe, cfg.data.lookback_limit) for s in symbols}
+    data = {
+        s: fetch_ohlcv(
+            cfg.exchange,
+            s,
+            cfg.timeframe,
+            cfg.data.lookback_limit,
+            timeout_ms=net.timeout_ms,
+            max_retries=net.max_retries,
+            backoff_base_ms=net.backoff_base_ms,
+            user_agent=net.user_agent,
+            proxies=proxies,
+        )
+        for s in symbols
+    }
     equity_df, trades_df = run_backtest(data, strat, cfg)
     metrics = compute_metrics(equity_df["equity"], trades_df, cfg.timeframe)
     st.subheader("Backtest Metrics")
